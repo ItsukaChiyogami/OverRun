@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Overrun</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background-image: url('beg.jpg');
+            background-size: cover;
+            background-position: center;
+        }
+
+        #navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: black;
+            color: white;
+            font-size: 20px;
+        }
+
+        #navbar-logo {
+            padding: 10px;
+            width: 100px;
+            text-align: center;
+        }
+
+        #navbar-menu {
+            padding: 10px;
+            width: 100px;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        #container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        #gameIframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+        }
+
+        #canvas {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 10;
+            width: 200px;
+            height: 200px;
+            display: none;
+        }
+
+        #label-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 20;
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+
+        #startScreen {
+            text-align: center;
+            margin-top: 20%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        #start-title {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 10px;
+            text-shadow: 2px 2px 5px rgba(255, 255, 255, 0.5);
+        }
+
+        #start-button {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            color: white;
+            background-color: rgba(0, 128, 255, 0.8);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #start-button:hover {
+            background-color: rgba(0, 102, 204, 0.8);
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="navbar">
+    <div id="navbar-logo"><img src="Logo.jpg" alt="Logo" style="width: 80px;"></div>
+    <div id="navbar-menu">Menu</div>
+</div>
+
+<div id="startScreen">
+    <div id="start-title">System Overrun</div>
+    <button type="button" id="start-button" onclick="init()">Start</button>
+</div>
+
+<div id="container">
+    <iframe src="index_game.html" id="gameIframe"></iframe>
+    <canvas id="canvas"></canvas>
+    <div id="label-container"></div>
+</div>
+
+<script src="model/tf.min.js"></script>
+<script src="model/teachablemachine-pose.min.js"></script>
+<script>
+    function simulateKeyPressInIframe(iframe, keyCode) {
+        let iframeDocument = iframe.contentWindow.document;
+
+        let keyDownEvent = new KeyboardEvent('keydown', {
+            keyCode: keyCode,
+            which: keyCode,
+            code: 'ArrowUp',
+            key: 'ArrowUp',
+            bubbles: true,
+            cancelable: true
+        });
+        iframeDocument.dispatchEvent(keyDownEvent);
+
+        setTimeout(function() {
+            let keyUpEvent = new KeyboardEvent('keyup', {
+                keyCode: keyCode,
+                which: keyCode,
+                code: 'ArrowUp',
+                key: 'ArrowUp',
+                bubbles: true,
+                cancelable: true
+            });
+            iframeDocument.dispatchEvent(keyUpEvent);
+        }, 100);
+    }
+
+    function simulateKeyPressInIframeGuard(iframe, keyCode) { 
+        let iframeDocument = iframe.contentWindow.document;
+
+        let keyDownEvent = new KeyboardEvent('keydown', {
+            keyCode: keyCode,
+            which: keyCode,
+            code: 'KeyE',  
+            key: 'KeyE',
+            bubbles: true,
+            cancelable: true
+        });
+        iframeDocument.dispatchEvent(keyDownEvent);
+
+        setTimeout(function() {
+            let keyUpEvent = new KeyboardEvent('keyup', {
+                keyCode: keyCode,
+                which: keyCode,
+                code: 'KeyE',
+                key: 'KeyE',
+                bubbles: true,
+                cancelable: true
+            });
+            iframeDocument.dispatchEvent(keyUpEvent);
+        }, 100);
+    }
+</script>
+
+<script>
+    function simulateUpArrowEverySecond() {
+        let iframe = document.getElementById('gameIframe');
+        if (iframe && iframe.contentWindow) {
+            setInterval(function() {
+                simulateKeyPressInIframe(iframe, 38);
+            }, 1000);
+        } else {
+            console.error('Iframe not found or not accessible');
+        }
+    }
+</script>
+
+<script type="text/javascript">
+    const gameIframe = document.getElementById('gameIframe');
+    const webcamCanvas = document.getElementById('canvas');
+    const intro = document.getElementById('startScreen');
+    const navbar = document.getElementById('navbar');
+
+    const URL = "model/";
+
+    let model, webcam, ctx, labelContainer, maxPredictions;
+
+    async function init() {
+        navbar.style.display = 'none';
+        intro.style.display = 'none';
+        gameIframe.style.display = 'block';
+        webcamCanvas.style.display = 'block';
+
+        const modelURL = URL + "model.json";
+        const metadataURL = URL + "metadata.json";
+
+        model = await tmPose.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+
+        const size = 200;
+        const flip = true; 
+        webcam = new tmPose.Webcam(size, size, flip);
+        await webcam.setup(); 
+        await webcam.play();
+        window.requestAnimationFrame(loop);
+
+        const canvas = document.getElementById("canvas");
+        canvas.width = size; 
+        canvas.height = size;
+        ctx = canvas.getContext("2d");
+        labelContainer = document.getElementById("label-container");
+        for (let i = 0; i < maxPredictions; i++) {
+            labelContainer.appendChild(document.createElement("div"));
+        }
+    }
+
+    async function loop(timestamp) {
+        webcam.update();
+        await predict();
+        window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+        let iframe = document.getElementById('gameIframe');
+        const { pose, posenetOutput } = await model.estimatePose(webcam.canvas);
+        const prediction = await model.predict(posenetOutput);
+
+        for (let i = 0; i < maxPredictions; i++) {
+            const classPrediction =
+                prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+            labelContainer.childNodes[i].innerHTML = classPrediction;
+
+            if (prediction[i].className === "jump" && prediction[i].probability > 0.7) {
+                simulateKeyPressInIframe(iframe, 38);  
+            }
+
+            if (prediction[i].className === "shield" && prediction[i].probability > 0.7) {
+                simulateKeyPressInIframeGuard(iframe, 69); 
+            }
+        }
+
+        drawPose(pose);
+    }
+
+    function drawPose(pose) {
+        if (webcam.canvas) {
+            ctx.drawImage(webcam.canvas, 0, 0);
+            if (pose) {
+                const minPartConfidence = 0.5;
+                tmPose.drawKeypoints(pose.keypoints, minPartConfidence, ctx);
+                tmPose.drawSkeleton(pose.keypoints, minPartConfidence, ctx);
+            }
+        }
+    }
+</script>
+</body>
+</html>
